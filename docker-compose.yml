@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: ai-ads-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: ai_ads
+      MYSQL_USER: aiuser
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ai-ads-network
+    restart: unless-stopped
+
+  # Spring Boot Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-ads-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ai_ads?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: aiuser
+      SPRING_DATASOURCE_PASSWORD: password
+      JWT_SECRET: mySecretKey123456789012345678901234567890
+      JWT_EXPIRATION: 3600000
+      JWT_REFRESH_EXPIRATION: 86400000
+      AWS_S3_BUCKET_NAME: ai-product-ads-media
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      REPLICATE_API_TOKEN: ${REPLICATE_API_TOKEN}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+    networks:
+      - ai-ads-network
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ai-ads-frontend
+    environment:
+      VITE_API_URL: http://localhost:8080/api
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - ai-ads-network
+    restart: unless-stopped
+
+  # Redis (for caching and sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: ai-ads-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - ai-ads-network
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  ai-ads-network:
+    driver: bridge
+
